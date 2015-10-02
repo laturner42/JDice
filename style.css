@@ -1,3 +1,39 @@
-canvas {
-    border: 1px solid black;
+#notify {
+    margin-left: 10px;
+}
+
+body {
+    padding: 0;
+    margin: 0;
+    background-color: #888;
+    font-family: sans-serif;
+}
+
+#game { 
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 64px;
+    bottom: 0;
+    padding: 0;
+    margin: 0;
+    overflow: auto;
+    background-color: #bbb;
+}
+
+.spanButton {
+    position: relative;
+    width: 100%;
+    height: 48px;
+    background-color: #459;
+    font-size: 30px;
+    margin-top: 5px;
+    color: #bbb;
+}
+
+.spanButtonTitle {
+    position: absolute;
+    left: 20px;
+    top: 5px;
+    color: white;
 }

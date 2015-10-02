@@ -1,16 +1,46 @@
 <html>
-<head>
-    <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
-    <script src="script.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css"/>
-</head>
-<body>
-    <canvas id="canvas" width="1280" height="720">
-        Your browser does not support the JavaScript canvas! Please use a more up to date browser. 
-    </canvas>
-    <br/>
-    <p id="output" style="word-wrap: break-word;">
-        Output will go here.
-    </p>
-</body>
+    <head>
+        <meta name="viewport" content="width=320,user-scalable=false" />
+		<script src="lib/lib/jquery-1.11.3.js"></script>
+		<link rel="stylesheet" type="text/css" href="style.css">
+		<title> JDice </title> 
+	</head>
+	<body>
+        <script src="lib/ws-client.js"></script>
+		<script src="script.js"></script>	
+        <span id="notify">Name:</span>
+        <form class="login" action="javascript:startConnection();">
+            <input type="text" id="name" class="login">
+        </form>
+        <span class="login">Host code:</span>
+        <form class="login" action="javascript:startConnection();">
+            <input type="text" id="host" class="login">
+        </form>
+
+        <button class="login" id="login">Login</button>
+        </br>
+        <button id="beginGame">
+            Begin game
+        </button> 
+
+        <div id="game">
+            <div id="myTurn">
+                <div class="spanButton turnButton" id="attack">
+                    <span class="spanButtonTitle">
+                        Attack Territory
+                    </span>
+                </div>
+                <div class="spanButton" id="goBack">
+                    <span class="spanButtonTitle">
+                        Go Back
+                    </span>
+                </div>
+                <div class="spanButton turnButton" id="endTurn">
+                    <span class="spanButtonTitle">
+                        End Turn
+                    </span>
+                </div>
+            </div>
+        </div>
+	</body>
 </html>

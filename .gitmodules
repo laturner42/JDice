@@ -1,0 +1,3 @@
+[submodule "PyWebPlug"]
+	path = PyWebPlug
+	url = https://github.com/HiroLord/PyWebPlug
