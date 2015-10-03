@@ -1,19 +1,54 @@
 #notify {
+    position: relative;
+    margin-top: 50px;
+}
+
+.disp {
     margin-left: 10px;
+    font-size: 32px;
 }
 
 body {
     padding: 0;
     margin: 0;
-    background-color: #888;
+    background-color: #666;
     font-family: sans-serif;
+    color: white;
+}
+
+input {
+    width: 100%;
+    height: 40px;
+    font-size: 15pt;
+    padding-left: 10px;
+    margin-top: 10px;
+    background-color: #eee;
+    border: 2px solid #888;
+    border-radius: 12px;
+}
+
+button {
+    border: 2px solid #eee;
+    background-color: #74D;
+    margin-left: 20px;
+    margin-top: 15px;
+    height: 45px;
+    color: white;
+    border-radius: 8px;
+    min-width: 128px;
+    font-size: 16pt;
+    font-weight: bold;
+}
+
+button:active {
+    background-color: #41A;
 }
 
 #game { 
     position: absolute;
     left: 0;
     right: 0;
-    top: 64px;
+    top: 48px;
     bottom: 0;
     padding: 0;
     margin: 0;
@@ -29,6 +64,10 @@ body {
     font-size: 30px;
     margin-top: 5px;
     color: #bbb;
+}
+
+.spanButton:active {
+    background-color: #348;
 }
 
 .spanButtonTitle {

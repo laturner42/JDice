@@ -1,6 +1,7 @@
 var hostCode = "0000";
 
 var countdown = -1;
+var turnLength = 45*30;
 
 $(document).ready(function() {
     var canvas = document.getElementById('canvas');
@@ -88,6 +89,7 @@ function newPlayer(pID, name) {
     player.name = name;
     player.terrs = [];
     player.dice = 1;
+    player.extra = 0;
     player.color = randomColor();
     player.sID = extend(pID, 2);
 
@@ -113,14 +115,24 @@ function distributeTerrs() {
             var p = playing[i];
             var t = avail.pop();
             t.setOwner(p);
+            t.dice = 1;
         }
     }
+    var minTerrs = terrs.length;
     for (var i=0; i<playing.length; i++) {
-        var numDice = 11;
+        if (playing[i].terrs.length < minTerrs) {
+            minTerrs = playing[i].terrs.length;
+        }
+    }
+
+    for (var i=0; i<playing.length; i++) {
+        var numDice = Math.ceil(minTerrs * 10/3) - playing[i].terrs.length;
         while (numDice > 0) {
             var num = Math.floor(Math.random() * playing[i].terrs.length);
-            playing[i].terrs[num].dice += 1;
-            numDice -= 1;
+            if (playing[i].terrs[num].dice < 8) {
+                playing[i].terrs[num].dice += 1;
+                numDice -= 1;
+            }
         }
     }
 }
@@ -141,11 +153,12 @@ function startGame() {
     } 
     nextTurn();
 }
-
+stage = 0;
 function nextTurn() {
-    countdown = 40*30;
+    stage = 1;
+    countdown = turnLength;
     turn += 1;
-    showHideAllTerrs(true);
+    showHideAllTerrs(false);
     if (turn >= playing.length) {
         turn = 0;
     }
@@ -188,6 +201,9 @@ function setupMessages() {
     i997.addChars(2);
     i997.addString();
 
+    var i0 = createMsgStruct(0, false);
+    i0.addChars(2);
+
     var i1 = createMsgStruct(1, false);
 
     var i3 = createMsgStruct(3, false);
@@ -210,6 +226,8 @@ function setupMessages() {
     var o999 = createMsgStruct(999, true);
     o999.addChars(4);
     o999.addString();
+
+    var o0 = createMsgStruct(0, true);
 
     var o1 = createMsgStruct(1, true);
     
@@ -256,34 +274,48 @@ function handleNetwork() {
         var pID = packet.readInt();
         var n = packet.read();
         players[pID].name = n;
+    } else if (msgID === 0) {
+        var sID = packet.read();
+        var pID = parseInt(sID);
+        if (stage === 0) {
+            var packet = newPacket(0);
+            packet.send(sID);
+        } else if (playing[turn] === players[pID]) {
+            var packet = newPacket(2);
+            packet.send(sID);
+        } else {
+            var packet = newPacket(1);
+            packet.send(sID);
+        }
     } else if (msgID === 1) {
         var pID = packet.read();
         distributeTerrs();
         startGame();
     } else if (msgID === 3) {
-        countdown = 40*30;
+        if (stage == 1) {
+            countdown = turnLength;
+        }
         var pID = packet.readInt();
         showHideAllTerrs(false);
         for (var i=0; i<players[pID].terrs.length; i++) {
             var terr = players[pID].terrs[i];
+            terr.resetColor();
             if (terr.dice < 2) {
                 continue;
             }
             terr.drawNum = true;
-            for (var k=0; k<terr.adj.length; k++) {
-                terr.adj[k].drawNum = true;
-            }
             var packet = newPacket(3);
             packet.write(terr.tID);
             packet.send(extend(pID, 2));
         }
     } else if (msgID === 4) {
-        countdown = 40*30;
+        if (stage == 1) {
+            countdown = turnLength;
+        }
         var pID = packet.readInt();
         var tID = packet.readInt();
         showHideAllTerrs(false);
-        players[pID].attacking = terrs[tID];
-        players[pID].attacking.drawNum = true;
+        players[pID].attackFrom = terrs[tID];
         terrs[tID].setColor("rgb(255,255,255)");
         for (var i=0; i<terrs[tID].adj.length; i++) {
             var a = terrs[tID].adj[i];
@@ -295,18 +327,23 @@ function handleNetwork() {
             }
         }
     } else if (msgID === 5) {
-        countdown = 40*30;
+        if (stage == 1) {
+            countdown = turnLength;
+        }
         var pID = packet.readInt();
         var tID = packet.readInt();
-        showHideAllTerrs(true);
+        showHideAllTerrs(false);
         // Attacking happens here
-        var terr1 = players[pID].attacking;
-        var terr2 = terrs[tID];
+        var terr1 = players[pID].attackFrom;
+        players[pID].attackTo = terrs[tID];
+        var terr2 = players[pID].attackTo;
         attack(terr1, terr2);
     } else if (msgID == 6) {
-        countdown = 40*30;
+        if (stage == 1) {
+            countdown = turnLength;
+        }
         var pID = packet.readInt();
-        showHideAllTerrs(true);
+        showHideAllTerrs(false);
         for (var i=0; i<players[pID].terrs.length; i++) {
             players[pID].terrs[i].resetColor();
         }
@@ -316,25 +353,40 @@ function handleNetwork() {
     }
 }
 
+var newDice = 0;
+var handle = [];
+
 function endTurn(player) {
-    var newDice = longestPath(player);
-    for (var i=0; i<newDice; i++) {
-        var k = Math.floor(Math.random() * player.terrs.length);
-        player.terrs[k].dice += 1;
+    newDice = longestPath(player) + player.extra;
+    handle = player.terrs.slice(0);
+    stage = 5;
+}
+
+function distDice(player) {
+    if (newDice > 0 && handle.length > 0) {
+        var k = Math.floor(Math.random() * handle.length);
+        if (handle[k].dice < 8) {
+            handle[k].dice += 1;
+            newDice -= 1;
+        } else {
+            handle.splice(k,1);
+            distDice(player);
+        }
+    } else {
+        player.extra = newDice;
+        nextTurn();
     }
-    nextTurn();
 }
 
 function attack(terr1, terr2) {
-    if (terr1.roll() > terr2.roll()) {
-        terr2.setOwner(terr1.owner);
-        terr2.dice = terr1.dice - 1;
-    }
-    terr1.resetColor();
-    terr2.resetColor();
-    terr1.dice = 1;
-    terr1.owner.calcDice();
-    terr2.owner.calcDice();
+    rollOne = [];
+    rollTwo = [];
+    rollTot1 = 0;
+    rollTot2 = 0;
+    stage = 3;
+    countdown = 5;
+    terr1.setColor("rgb(255,255,255)");
+    terr2.setColor("rgb(255,255,255)");
 }
 
 var mouseDown = 0;
@@ -342,18 +394,75 @@ var mouseDown = 0;
 
 var activeTerr = undefined;
 
+var rollOne = [];
+var rollTwo = [];
+var rollTot1 = 0;
+var rollTot2 = 0;
+function handleDiceRolls() {
+    var p = playing[turn];
+    var terr1 = p.attackFrom;
+    var terr2 = p.attackTo;
+    var r = Math.ceil(Math.random() * 6);
+    if (rollOne.length < terr1.dice) {
+        rollOne.push(r);
+        rollTot1 += r;
+    } else if (rollTwo.length < terr2.dice) {
+        rollTwo.push(r);
+        rollTot2 += r;
+    } else {
+        countdown = 22;
+        stage = 4;
+    }
+}
+
+function handleDiceRolled() {
+    var p = playing[turn];
+    var terr1 = p.attackFrom;
+    var terr2 = p.attackTo;
+
+    var owners = [terr1.owner, terr2.owner];
+
+    if (rollTot1 > rollTot2) {
+        terr2.setOwner(terr1.owner);
+        terr2.dice = terr1.dice - 1;
+    }
+    terr1.resetColor();
+    terr2.resetColor();
+    terr1.dice = 1;
+    owners[0].calcDice();
+    owners[1].calcDice();
+}
+
+var matchup_x = 180;
+var matchup_y = 320;
+var scoreBG = roundRect(matchup_x, matchup_y, 400, 96, 15);
+
 function gameLoop(ctx) {
     //handleMouse();
+    ctx.fillStyle = "rgb(200,200,210)";
+    ctx.fillRect(0, 0, 1280, 720);
+
+
+    
+    if (stage == 5) {
+        distDice(playing[turn]);
+    }
     
     if (countdown > 0) {
         countdown -= 1;
     } else if (countdown == 0) {
-        countdown = 30*30;
-        endTurn(playing[turn]);
+        if (stage == 1) {
+            countdown = turnLength;
+            endTurn(playing[turn]);
+        } else if (stage == 3) {
+            countdown = 1;
+            handleDiceRolls();
+        } else if (stage == 4) {
+            handleDiceRolled();
+            countdown = turnLength;
+            stage = 1;
+        }
     }
-
-    ctx.fillStyle = "rgb(140,140,150)";
-    ctx.fillRect(0, 0, 1280, 720);
 
     for (var i=0; i<hexes.length; i++) {
         if (hexes[i]) {
@@ -365,8 +474,8 @@ function gameLoop(ctx) {
         }
     }
 
-    for (var t=0; t<terrs.length; t++) {
-        terrs[t].draw(ctx);
+    for (var t=0; t<drawTerrs.length; t++) {
+        drawTerrs[t].draw(ctx);
     }
 
     for (var b=0; b<buttons.length; b++) {
@@ -382,6 +491,32 @@ function gameLoop(ctx) {
 
     ctx.fillText("Host code: "+hostCode+" | 128.61.29.30", 10, 25);
 
+    if (stage == 3 || stage == 4) {
+        ctx.font = "30px sans-serif";
+        ctx.fillStyle = "rgb(220,220,220)";
+        ctx.strokeStyle = "rgb(40,40,40)";
+        ctx.fill(scoreBG);
+        ctx.stroke(scoreBG);
+        var str1 = rollTot1 + " : ";
+        var str2 = rollTot2 + " : ";
+        for (var i=0; i<rollOne.length; i++) {
+            str1 += String(rollOne[i]) + " ";
+        }
+        for (var i=0; i<rollTwo.length; i++) {
+            str2 += String(rollTwo[i]) + " ";
+        }
+        ctx.strokeStyle = "rgb(0,0,0)";
+
+        ctx.fillStyle = playing[turn].color;
+        var mx = matchup_x + 32;
+        var my = matchup_y + 36;
+        ctx.fillText(str1, mx , my);
+        ctx.strokeText(str1, mx, my);
+        ctx.fillStyle = playing[turn].attackTo.owner.color;
+        ctx.fillText(str2, mx, my + 44);
+        ctx.strokeText(str2, mx, my + 44);
+    }
+
     for (var i=0; i<playing.length; i++) {
         ctx.font = "32px sans-serif";
         var p = playing[i];
@@ -389,7 +524,9 @@ function gameLoop(ctx) {
         ctx.strokeStyle = "rgb(0,0,0)";
         var str = p.name + " | Territories: " + p.terrs.length + " | Dice: " + p.dice;
         if (turn == i) {
-            str = String(Math.floor(countdown/30)) + " > "+str;
+            str = String(Math.ceil(countdown/30)) + " > " + str;
+        } if (p.extra > 0) {
+            str += " + " + String(p.extra);
         }
         ctx.fillText(str, 40, 480 + (i * 38));
         ctx.strokeText(str, 40, 480 + (i * 38));
@@ -420,24 +557,39 @@ function newTerr(num, dButton) {
     t.avg_x = 0;
     t.avg_y = 0;
     t.hexes = [];
-    t.color = "rgb(80,80,80)";//randomColor();
+    t.color = "rgb(160,160,160)";//randomColor();
+    t.bright = brighten(t.color, 40);
     t.owner = undefined;
-    t.dice = 1;
+    t.dice = Math.ceil(Math.random() * 5);
     t.adj = [];
-    t.drawNum = true;
+    t.drawNum = false;
+    t.diceImgs = [];
 
     t.addHex = function(h) {
         this.hexes.push(h);
     };
 
     t.draw = function(ctx) {
-        var s = String(this.tID) + ":" + String(this.dice);
+        //Draw dice
         ctx.strokeStyle = "rgb(0,0,0)";
         ctx.fillStyle = this.color;
+
+        for (var i=0; i<this.dice; i++) {
+            ctx.fillStyle = this.bright;
+            ctx.fill(this.diceImgs[i]);
+            ctx.strokeStyle = "rgb(0,0,0)";
+            ctx.stroke(this.diceImgs[i]);
+        }
+
         if (this.drawNum) {
-            ctx.font = "22px sans-serif";
-            ctx.fillText(s, this.avg_x - 9, this.avg_y + 2);
-            ctx.strokeText(s, this.avg_x - 9, this.avg_y + 2);
+            // Draw Terr number
+            var s = String(this.tID);
+            ctx.font = "bold 30px sans-serif";
+            ctx.fillStyle = "rgb(255,255,255)";
+            var xoff = -20;
+            var yoff = 2;
+            ctx.fillText(s, this.avg_x + xoff, this.avg_y + yoff);
+            ctx.strokeText(s, this.avg_x + xoff, this.avg_y + yoff);
         }
     }
 
@@ -460,7 +612,11 @@ function newTerr(num, dButton) {
         }
         this.owner = owner;
         this.owner.terrs.push(this);
-        this.setColor(this.owner.color);    
+        this.setColor(this.owner.color);
+        this.bright = brighten(this.color, 50);
+        this.owner.terrs.sort(function(t1, t2) {
+            return t1.tID - t2.tID;
+        });
     }
 
     t.roll = function() {
@@ -480,6 +636,54 @@ function newTerr(num, dButton) {
     return t;
 }
 
+function brighten(color, amnt) {
+    var s = color.indexOf("(");
+    var e = color.indexOf(")");
+    var c = color.slice(s+1, e);
+    var cc = c.split(",");
+    var r = parseInt(cc[0]) + amnt;
+    var g = parseInt(cc[1]) + amnt;
+    var b = parseInt(cc[2]) + amnt;
+    if (r > 255) { r = 255; }
+    if (g > 255) { g = 255; }
+    if (b > 255) { b = 255; }
+    var out = "rgb("+r+","+g+","+b+")";
+    return out;
+}
+
+function renderDice(terr) {
+    terr.diceImgs = [];
+    var dx = terr.avg_x;
+    var dy = terr.avg_y;
+    var diceWidth = 16;
+    var diceHeight = 16;
+    var spread = 6;
+    var w2 = diceWidth/2;
+    var h2 = diceHeight/2;
+    var s2 = spread/2;
+    for (var i=0; i<8; i++) {
+        var x = dx;
+        var y = dy - (i%4)*(diceHeight-spread) - 1;
+        if (i >= 4) {
+            x -= diceWidth * (2/3);
+            y += h2 - s2;
+        }
+        var path = new Path2D();
+        path.moveTo(x-w2, y-h2+s2);
+        path.lineTo(x-w2, y+h2-s2);
+        path.lineTo(x, y+h2);
+        path.lineTo(x+w2, y+h2-s2);
+        path.lineTo(x+w2, y-h2+s2);
+        path.lineTo(x, y-h2);
+        path.lineTo(x-w2, y-h2+s2);
+        path.lineTo(x, y-h2+spread);
+        path.lineTo(x+w2, y-h2+s2);
+        path.moveTo(x, y-h2+spread);
+        path.lineTo(x, y+h2);
+        terr.diceImgs[i] = path;
+    }
+}
+
 
 var gold = 0.618033988749895;
 var hsvH = Math.random();
@@ -488,7 +692,7 @@ function randomColor() {
     var h = hsvH
     h = h % 1;
     var s = 0.5;
-    var v = 0.95;
+    var v = 0.75;
 
     var r, g, b;
 
@@ -530,6 +734,7 @@ function randomColor() {
 }
 
 var terrs = [];
+var drawTerrs = [];
 var hexes = [];
 var hexWidth = 28;
 var hexHeight = 14;
@@ -765,7 +970,15 @@ function parseMap(allText, edit) {
         }
         terrs[t].avg_x /= terrs[t].hexes.length;
         terrs[t].avg_y /= terrs[t].hexes.length;
+        terrs[t].adj.sort(function(t1, t2) {
+            return t1.tID - t2.tID;
+        });
+        renderDice(terrs[t]);
     }
+    drawTerrs = terrs.slice(0);
+    drawTerrs.sort(function(terr1, terr2) {
+        return terr1.avg_y - terr2.avg_y;
+    });
 }
 
 
@@ -834,4 +1047,23 @@ function getMousePos(canvas, evt) {
     var rect = canvas.getBoundingClientRect();
     mouse_x = evt.clientX - rect.left;
     mouse_y = evt.clientY - rect.top;
+}
+
+function roundRect(x, y, width, height, radius) {
+    if (!radius) {
+        radius = 5;
+    }
+    var ctx = new Path2D;
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+    
+    return ctx;
 }

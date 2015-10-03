@@ -22,6 +22,7 @@ $(document).ready(function() {
         packet.send();
     });
     $("#goBack").click(function() {
+        $("#notify").text("It is your turn!");
         $(".turnButton").show();
         $(".terrButton").remove();
         var packet = newPacket(6);
@@ -39,6 +40,8 @@ $(document).ready(function() {
 function setupMessages() {
     var i999 = createMsgStruct(MSG_LOGIN, false);
     i999.addChars(2);
+
+    var i0 = createMsgStruct(0, false);
 
     var i1 = createMsgStruct(1, false);
 
@@ -58,6 +61,9 @@ function setupMessages() {
     var o997 = createMsgStruct(997, true);
     o997.addChars(2);
     o997.addString();
+
+    var o0 = createMsgStruct(0, true);
+    o0.addChars(2);
 
     var o1 = createMsgStruct(1, true);
 
@@ -113,8 +119,12 @@ function handleNetwork() {
 
     if (msgID === MSG_LOGIN) {
         pID = packet.read();
-        $("#notify").text("You are client number "+pID);
+        $("#notify").text("You are player number "+pID+".");
         $(".login").remove();
+        var packet = newPacket(0);
+        packet.write(pID);
+        packet.send();
+    } else if (msgID === 0) {
         $("#beginGame").show();
     } else if (msgID === 1) {
         // Game started.
@@ -125,14 +135,16 @@ function handleNetwork() {
         $(".terrButton").remove();
     } else if (msgID === 2) {
         $("#notify").text("It is your turn!");
+        $("#game").show();
         startTurn();
     } else if (msgID === 3) {
-        $("#notify").text("Showing...");
+        $("#notify").text("Choose your territory.");
         $(".turnButton").hide();
         var tID = packet.read();
-        var terr = $('<div class="spanButton terrButton">Territory '+tID+'</div>');
+        var terr = $('<div class="spanButton terrButton"><span class="spanButtonTitle">Territory '+tID+'</span></div>');
         terr.click(function() {
             $(".terrButton").remove();
+            $("#notify").text("You can attack these territories.");
             var packet = newPacket(4);
             packet.write(pID);
             packet.write(tID);
@@ -140,9 +152,8 @@ function handleNetwork() {
         });
         $("#myTurn").append(terr);
     } else if (msgID === 4) {
-        $("#notify").text("You can attack these territories");
         var tID = packet.read();
-        var terr = $('<div class="spanButton terrButton">Territory '+tID+'</div>');
+        var terr = $('<div class="spanButton terrButton"><span class="spanButtonTitle">Territory '+tID+'<span></div>');
         terr.click(function() {
             var packet = newPacket(5);
             packet.write(pID);
