@@ -1,9 +1,9 @@
 var MSG_LOGIN = 999;
-var pID = 0;
 
-$(document).ready(function() {
+function main() {
     setupMessages();
-    
+   
+    $(".login").hide(); 
     $("#game").hide();
     $("#beginGame").hide();
 
@@ -35,7 +35,12 @@ $(document).ready(function() {
         packet.write(pID);
         packet.send();
     });
-});
+
+    setInterval(handleNetwork, 16);
+    var packet = newPacket(0);
+    packet.write(pID);
+    packet.send();
+}
 
 function setupMessages() {
     var i999 = createMsgStruct(MSG_LOGIN, false);
@@ -97,7 +102,6 @@ function startConnection() {
         packet.write($("#name").val());
         packet.send();
 
-        setInterval(handleNetwork, 16);
     }
 
     var onclose = function() {

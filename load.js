@@ -1,5 +1,8 @@
 // This is where we define our messages (similar to an enum)
-var MSG_LOGIN = 1;
+var MSG_LOGIN = 999;
+var pID;
+
+var initialWait;
 
 $(document).ready(function() {
 
@@ -14,7 +17,7 @@ $(document).ready(function() {
     });
 
     // This interval can be used for anything, but it currently only handles incoming messaged.
-    setInterval(gameLoop, 15);
+    initialWait = setInterval(gameLoop, 15);
 });
 
 function setupMessages() {
@@ -22,10 +25,13 @@ function setupMessages() {
     var m1 = createMsgStruct(MSG_LOGIN, false);
     // This packet will be carrying two chars
     m1.addChars(2);
+    m1.addString();
+    m1.addString();
 
     // Outgoing MSG_LOGIN
     var i1 = createMsgStruct(MSG_LOGIN, true);
     // This packet sends a string (our name) to the server
+    i1.addChars(4);
     i1.addString();
 }
 
@@ -36,6 +42,7 @@ function startConnection() {
         var packet = newPacket(MSG_LOGIN);
         // Writing our name. 'Write' is currently expecting a String,
         // as that is what we defined earlier.
+        packet.write($("#host").val().toUpperCase());
         packet.write($("#name").val());
         // and then we send the packet!
         packet.send();
@@ -67,8 +74,15 @@ function handleNetwork() {
 
     // And handle it!
     if (msgID === MSG_LOGIN) {
-        var pid = packet.read();
-        alert("You are client number " + pid);
+        pID = packet.read();
+        var html = packet.read();
+        var script = packet.read();
+        $("#newHtml").load(html, function() {
+        });
+        $.getScript(script, function(data, textStatus, req) {
+            clearInterval(initialWait);
+            main();
+        });
     }
 }
 

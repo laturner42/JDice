@@ -14,6 +14,9 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.path = "/index.html"
             if self.path[0:4] == "/lib":
                 self.path = "/PyWebPlug" + self.path[4:]
+            qInd = self.path.find("?")
+            if (qInd >= 0):
+                self.path = self.path[:qInd]
             f = open(curdir + sep + self.path)
             out = f.read()
             ext = self.path.split('.')
