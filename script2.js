@@ -3,6 +3,13 @@ var hostCode = "0000";
 var countdown = -1;
 var turnLength = 45*30;
 
+var hexWidth = 28;
+var hexHeight = 14;
+var blip = 6;
+
+var mapWidth = 30;
+var mapHeight = 50;
+
 $(document).ready(function() {
     var canvas = document.getElementById('canvas');
     var ctx = canvas.getContext('2d');
@@ -15,8 +22,6 @@ $(document).ready(function() {
     ctx.fillRect (30, 30, 55, 50);
     */
 
-    var mapWidth = 30;
-    var mapHeight = 50;
 
     for (var i=0; i<mapHeight; i+=2) {
         hexes[i] = new Array();
@@ -86,7 +91,6 @@ var turn = 0;
 function newPlayer(pID, name) {
     var player = {};
     player.pID = pID;
-    player.name = name;
     player.terrs = [];
     player.dice = 1;
     player.extra = 0;
@@ -102,6 +106,13 @@ function newPlayer(pID, name) {
             this.dice += this.terrs[i].dice;
         }
     }
+
+    player.setName = function(n) {
+        this.name = n;
+        this.htmlName = '<span style="color: '+this.color+'">'+this.name+'</span>';
+    }
+
+    player.setName(name);
 }
 
 function distributeTerrs() {
@@ -273,7 +284,7 @@ function handleNetwork() {
     } else if (msgID === 997) {
         var pID = packet.readInt();
         var n = packet.read();
-        players[pID].name = n;
+        players[pID].setName(n);
     } else if (msgID === 0) {
         var sID = packet.read();
         var pID = parseInt(sID);
@@ -423,8 +434,11 @@ function handleDiceRolled() {
     var owners = [terr1.owner, terr2.owner];
 
     if (rollTot1 > rollTot2) {
+        $("#log").prepend("<div>" + terr1.owner.htmlName + " beat " + terr2.owner.htmlName +"</div>");
         terr2.setOwner(terr1.owner);
         terr2.dice = terr1.dice - 1;
+    } else {
+        $("#log").prepend("<div>" + terr2.owner.htmlName + " defended " + terr1.owner.htmlName +"</div>");
     }
     terr1.resetColor();
     terr2.resetColor();
@@ -437,10 +451,46 @@ var matchup_x = 180;
 var matchup_y = 320;
 var scoreBG = roundRect(matchup_x, matchup_y, 400, 96, 15);
 
+var oldWidth = 0;
+var oldHeight = 0;
+
 function gameLoop(ctx) {
+    var canWidth = window.innerWidth-2;
+    if (canWidth < 718) {
+        canWidth = 718;
+    }
+    ctx.canvas.width = canWidth;
+    ctx.canvas.height = window.innerHeight-2;
+    var canvasWidth = ctx.canvas.width;
+    var canvasHeight = ctx.canvas.height;
+
+    if (oldWidth != canvasWidth || oldHeight != canvasHeight) {
+        $("#log").show();
+        var dwi = 200;
+        if (canvasWidth < 900) {
+            $("#log").hide();
+            dwi = -128;
+        }
+        hexWidth = Math.ceil((canvasWidth - dwi) / mapWidth);
+        hexHeight = Math.ceil(((canvasHeight * 2) - 720) / mapHeight);
+        for (var i=0; i<hexes.length; i++) {
+            for (var j=0; j<hexes[i].length; j++) {
+                if (hexes[i][j]) {
+                    hexes[i][j].move();
+                    createBorder(hexes[i][j]);
+                }
+            }
+        }
+        for (var i=0; i<terrs.length; i++) {
+            renderTerr(terrs[i]);
+        }
+        oldWidth = canvasWidth;
+        oldHeight = canvasHeight;
+    }
+
     //handleMouse();
-    ctx.fillStyle = "rgb(200,200,210)";
-    ctx.fillRect(0, 0, 1280, 720);
+    ctx.fillStyle = "rgb(150,170,210)";
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
 
     
@@ -518,18 +568,46 @@ function gameLoop(ctx) {
     }
 
     for (var i=0; i<playing.length; i++) {
+        var drX = 40;
+        var drY = canvasHeight - 240 + (i * 38);
+
         ctx.font = "32px sans-serif";
         var p = playing[i];
         ctx.fillStyle = p.color;
         ctx.strokeStyle = "rgb(0,0,0)";
-        var str = p.name + " | Territories: " + p.terrs.length + " | Dice: " + p.dice;
-        if (turn == i) {
-            str = String(Math.ceil(countdown/30)) + " > " + str;
-        } if (p.extra > 0) {
+
+        //var str = p.name + " | Territories: " + p.terrs.length + " | Dice: " + p.dice;
+        var str = p.name;
+        while (ctx.measureText(str).width > 50 && str.length > 2) {
+            str = str.slice(0, str.length-2);
+        }
+        ctx.fillText(str, drX, drY);
+        ctx.strokeText(str, drX, drY);
+        var pHexS = 10;
+        var pHex = new Path2D;
+        drX += pHexS;
+        drY += Math.ceil(pHexS*(3/2));
+        pHex.moveTo(drX-pHexS,drY);
+        pHex.lineTo(drX,drY-pHexS);
+        pHex.lineTo(drX+pHexS,drY);
+        pHex.lineTo(drX,drY+pHexS);
+        pHex.lineTo(drX-pHexS,drY);
+        ctx.font = "28px sans-serif";
+        ctx.fill(pHex);
+        ctx.stroke(pHex);
+        ctx.fillRect(drX+64,drY-pHexS,pHexS*2,pHexS*2);
+        ctx.strokeRect(drX+64,drY-pHexS,pHexS*2,pHexS*2);
+        drX += Math.ceil(pHexS * (3/2));
+        drY += pHexS - 1;
+        ctx.fillText(String(p.terrs.length), drX, drY);
+        ctx.strokeText(String(p.terrs.length), drX, drY);
+        drX += 76;
+        str = String(p.dice);
+        if (p.extra > 0) {
             str += " + " + String(p.extra);
         }
-        ctx.fillText(str, 40, 480 + (i * 38));
-        ctx.strokeText(str, 40, 480 + (i * 38));
+        ctx.fillText(str, drX, drY);
+        ctx.strokeText(str, drX, drY);
     }
 }
 
@@ -600,7 +678,7 @@ function newTerr(num, dButton) {
     t.setColor = function(color) {
         this.color = color;
         for (var i=0; i<this.hexes.length; i++) {
-            this.hexes[i].color = this.color;
+            this.hexes[i].setColor(this.color);
         }
 
     }
@@ -647,11 +725,25 @@ function brighten(color, amnt) {
     if (r > 255) { r = 255; }
     if (g > 255) { g = 255; }
     if (b > 255) { b = 255; }
+    if (r < 0) { r = 0; }
+    if (g < 0) { g = 0; }
+    if (b < 0) { b = 0; }
     var out = "rgb("+r+","+g+","+b+")";
     return out;
 }
 
-function renderDice(terr) {
+function renderTerr(terr) {
+    terr.avg_x = 0;
+    terr.avg_y = 0;
+    for (var h=0; h<terr.hexes.length; h++) {
+        var hh = terr.hexes[h];
+        terr.avg_x += hh.x;
+        terr.avg_y += hh.y;
+    }
+    terr.avg_x /= terr.hexes.length;
+    terr.avg_y /= terr.hexes.length;
+
+
     terr.diceImgs = [];
     var dx = terr.avg_x;
     var dy = terr.avg_y;
@@ -736,9 +828,7 @@ function randomColor() {
 var terrs = [];
 var drawTerrs = [];
 var hexes = [];
-var hexWidth = 28;
-var hexHeight = 14;
-var blip = 6;
+
 
 var surrounding = [
     Array(-2, 0),
@@ -864,6 +954,8 @@ function createBorder(hex) {
 }
 
 function placeHex(r, c) {
+    return newHex(r,c);
+    /*
     if (r%2 == 0) {
         x = 80 + ((c/2) * (2*hexWidth - blip*2));
     } else {
@@ -871,17 +963,20 @@ function placeHex(r, c) {
     }
     y = 80 + r * (hexHeight/2);
     return newHex(r, c, x, y);
+    */
 }
 
-function newHex(r, c, x, y) {
+function newHex(r, c) {
     var hex = {};
-    hex.x = x;
-    hex.y = y;
+    hex.x = 0;
+    hex.y = 0;
     hex.r = r;
     hex.c = c;
-
+    hex.tID = -1;
     hex.color = "rgb(200, 0, 0)";
+    hex.dark = "rgb(160, 0, 0)";
 
+    /*
     var height = hexHeight;
     var width = hexWidth;
 
@@ -900,15 +995,30 @@ function newHex(r, c, x, y) {
 
     hex.shape = path;
 
-    hex.tID = -1;
-
     hex.border = path;
+    */
+
+    hex.move = function() {
+        if (this.r%2 == 0) {
+            this.x = hexWidth + ((this.c/2) * (2*hexWidth - blip*2));
+        } else {
+            this.x = hexWidth + (((this.c-1)/2) * (2*hexWidth - blip*2) + (hexWidth - blip));
+        }
+        this.y = 60 + this.r * (hexHeight/2);
+        this.redraw();
+    }
+
+    hex.redraw = function() {
+        this.shape = renderHex(this.x, this.y);
+        this.border = this.shape;
+        createBorder(this);
+    }
 
     hex.draw = function(ctx) {
         ctx.fillStyle = hex.color;
         ctx.fill(this.shape);
         if (this.border) {
-            ctx.strokeStyle = "rgb(0, 0, 0)";
+            ctx.strokeStyle = this.dark;
             ctx.stroke(this.border);
         }
         /*
@@ -920,11 +1030,38 @@ function newHex(r, c, x, y) {
         */
     }
 
+    hex.setColor = function(color) {
+        this.color = color;
+        this.dark = brighten(color, -100);
+    }
+
     hex.resetColor = function() {
         this.color = terrs[this.tID].color;
     }
 
+    hex.move();
+
     return hex;
+}
+
+function renderHex(x, y) {
+    var height = hexHeight;
+    var width = hexWidth;
+
+    var w2 = width/2;
+    var h2 = height/2;
+    var diff = w2 - blip;
+   
+    var path = new Path2D();
+    path.moveTo(x-diff, y-h2);
+    path.lineTo(x+diff, y-h2);
+    path.lineTo(x+w2, y);
+    path.lineTo(x+diff, y+h2);
+    path.lineTo(x-diff, y+h2);
+    path.lineTo(x-w2, y);
+    path.closePath();
+
+    return path;
 }
 
 // Map making
@@ -943,7 +1080,7 @@ function parseMap(allText, edit) {
         if (n <= -1) {
             n = -2;
         } else {
-            hexes[r][c].color = terrs[n].color;
+            hexes[r][c].setColor(terrs[n].color);
         }
         hexes[r][c].tID = n;
         if (n >= 0) {
@@ -951,13 +1088,8 @@ function parseMap(allText, edit) {
         }
     }
     for (var t=0; t<terrs.length; t++) {
-        terrs[t].avg_x = 0;
-        terrs[t].avg_y = 0;
         for (var h=0; h<terrs[t].hexes.length; h++) {
             var hh = terrs[t].hexes[h];
-            terrs[t].avg_x += hh.x;
-            terrs[t].avg_y += hh.y;
-            createBorder(hh);
             var surrounding = getSurrounding(hh);
             for (var i=0; i<surrounding.length; i++) {
                 var sur = surrounding[i];
@@ -967,13 +1099,13 @@ function parseMap(allText, edit) {
                     }
                 }
             }
+            
+            hh.move();
         }
-        terrs[t].avg_x /= terrs[t].hexes.length;
-        terrs[t].avg_y /= terrs[t].hexes.length;
         terrs[t].adj.sort(function(t1, t2) {
             return t1.tID - t2.tID;
         });
-        renderDice(terrs[t]);
+        renderTerr(terrs[t]);
     }
     drawTerrs = terrs.slice(0);
     drawTerrs.sort(function(terr1, terr2) {

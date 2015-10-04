@@ -161,6 +161,7 @@ function handleNetwork() {
             packet.send();
             $(".terrButton").remove();
             $(".turnButton").show();
+            $("#notify").text("It is your turn!");
         });
         $("#myTurn").append(terr);
     }
