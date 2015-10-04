@@ -153,10 +153,10 @@ var round = 0;
 
 function startGame() {
     turn = Math.floor(Math.random() * playing.length) - 1;
+    startTurn = turn + 1;
     if (turn < 0) {
         turn = 0;
     }
-    startTurn = turn + 1;
     for (var i=0; i<playing.length; i++) {
         var p = playing[i];
         var packet = newPacket(1);
@@ -175,11 +175,13 @@ function nextTurn() {
     }
     if (turn == startTurn) {
         round += 1;
+        log("Round "+round);
     }
     if (playing[turn].terrs.length == 0) {
-        nextTurn()
-        return
+        nextTurn();
+        return;
     }
+    log(playing[turn].htmlName + "'s turn began");
     for (var i=0; i<playing.length; i++) {
         playing[i].calcDice(); 
         if (i == turn) { continue; }
@@ -368,6 +370,7 @@ var newDice = 0;
 var handle = [];
 
 function endTurn(player) {
+    log(player.htmlName + "'s turn ended");
     newDice = longestPath(player) + player.extra;
     handle = player.terrs.slice(0);
     stage = 5;
@@ -434,17 +437,21 @@ function handleDiceRolled() {
     var owners = [terr1.owner, terr2.owner];
 
     if (rollTot1 > rollTot2) {
-        $("#log").prepend("<div>" + terr1.owner.htmlName + " beat " + terr2.owner.htmlName +"</div>");
+        log(terr1.owner.htmlName + " beat " + terr2.owner.htmlName);
         terr2.setOwner(terr1.owner);
         terr2.dice = terr1.dice - 1;
     } else {
-        $("#log").prepend("<div>" + terr2.owner.htmlName + " defended " + terr1.owner.htmlName +"</div>");
+        log(terr2.owner.htmlName + " defended " + terr1.owner.htmlName);
     }
     terr1.resetColor();
     terr2.resetColor();
     terr1.dice = 1;
     owners[0].calcDice();
     owners[1].calcDice();
+}
+
+function log(string) {
+    $("#log").prepend("<div>"+ string +"</div>");
 }
 
 var matchup_x = 180;
@@ -539,7 +546,7 @@ function gameLoop(ctx) {
         ctx.fillText("Territory " + String(activeTerr.tID), 10, 20);
     }
 
-    ctx.fillText("Host code: "+hostCode+" | 128.61.29.30", 10, 25);
+    ctx.fillText("Host code: "+hostCode+" | 128.61.29.30", 10, 30);
 
     if (stage == 3 || stage == 4) {
         ctx.font = "30px sans-serif";
@@ -568,17 +575,21 @@ function gameLoop(ctx) {
     }
 
     for (var i=0; i<playing.length; i++) {
-        var drX = 40;
-        var drY = canvasHeight - 240 + (i * 38);
+        var beside = Math.floor(canvasWidth/180);
+        var sDrX = (i%beside) * 180;
+        var sDrY = canvasHeight - 240 + (Math.floor(i/beside) * 96);
 
-        ctx.font = "32px sans-serif";
+        var drX = sDrX;
+        var drY = sDrY;
+
+        ctx.font = "36px sans-serif";
         var p = playing[i];
         ctx.fillStyle = p.color;
         ctx.strokeStyle = "rgb(0,0,0)";
 
         //var str = p.name + " | Territories: " + p.terrs.length + " | Dice: " + p.dice;
         var str = p.name;
-        while (ctx.measureText(str).width > 50 && str.length > 2) {
+        while (ctx.measureText(str).width > 180 && str.length > 2) {
             str = str.slice(0, str.length-2);
         }
         ctx.fillText(str, drX, drY);
@@ -592,22 +603,29 @@ function gameLoop(ctx) {
         pHex.lineTo(drX+pHexS,drY);
         pHex.lineTo(drX,drY+pHexS);
         pHex.lineTo(drX-pHexS,drY);
-        ctx.font = "28px sans-serif";
+        ctx.font = "32px sans-serif";
         ctx.fill(pHex);
         ctx.stroke(pHex);
         ctx.fillRect(drX+64,drY-pHexS,pHexS*2,pHexS*2);
         ctx.strokeRect(drX+64,drY-pHexS,pHexS*2,pHexS*2);
         drX += Math.ceil(pHexS * (3/2));
-        drY += pHexS - 1;
+        drY += pHexS + 1;
         ctx.fillText(String(p.terrs.length), drX, drY);
         ctx.strokeText(String(p.terrs.length), drX, drY);
         drX += 76;
         str = String(p.dice);
         if (p.extra > 0) {
-            str += " + " + String(p.extra);
+            //str += " + " + String(p.extra);
         }
         ctx.fillText(str, drX, drY);
         ctx.strokeText(str, drX, drY);
+        if (playing[turn] === playing[i]) {
+            if (stage == 1) {
+                var barWidth = 180 * (countdown/turnLength);
+                ctx.fillRect(sDrX,sDrY+30, barWidth, 8);
+                ctx.strokeRect(sDrX,sDrY+30, barWidth, 8);
+            }
+        }
     }
 }
 
@@ -662,7 +680,7 @@ function newTerr(num, dButton) {
         if (this.drawNum) {
             // Draw Terr number
             var s = String(this.tID);
-            ctx.font = "bold 30px sans-serif";
+            ctx.font = "bold 36px sans-serif";
             ctx.fillStyle = "rgb(255,255,255)";
             var xoff = -20;
             var yoff = 2;
@@ -742,13 +760,15 @@ function renderTerr(terr) {
     }
     terr.avg_x /= terr.hexes.length;
     terr.avg_y /= terr.hexes.length;
+    terr.avg_x = Math.floor(terr.avg_x);
+    terr.avg_y = Math.floor(terr.avg_y);
 
 
     terr.diceImgs = [];
     var dx = terr.avg_x;
     var dy = terr.avg_y;
-    var diceWidth = 16;
-    var diceHeight = 16;
+    var diceWidth = hexWidth * (4/9);
+    var diceHeight = hexHeight;
     var spread = 6;
     var w2 = diceWidth/2;
     var h2 = diceHeight/2;
