@@ -56,7 +56,7 @@ $(document).ready(function() {
 
             $("#output").text(out);
         } else if (event.keyCode == 57) {
-            parseMap("file:///Users/PrestonT/JDice/map.txt", true);
+            generateMap();
         } else if (event.keyCode == 56) {
             httpGet("/map.txt", parseMap, false);
         }
@@ -96,9 +96,15 @@ function newPlayer(pID, name) {
     player.extra = 0;
     player.color = randomColor();
     player.sID = extend(pID, 2);
+    player.surrender = [];
 
-    players[pID] = player;
-    playing.push(player);
+    if (pID >= 0) {
+        players[pID] = player;
+        if (stage == 0) {
+            playing.push(player);
+        }
+        log(name + " has entered.");
+    }
 
     player.calcDice = function() {
         this.dice = 0;
@@ -112,7 +118,23 @@ function newPlayer(pID, name) {
         this.htmlName = '<span style="color: '+this.color+'">'+this.name+'</span>';
     }
 
+    player.surrenderTo = function(p) {
+        if (this.surrender.indexOf(p) < 0) {
+            this.surrender.push(p);
+            return true;
+        }
+        return false;
+    }
+
+    player.setColor = function(color) {
+        this.color = color;
+        for (i in this.terrs) {
+            terrs[i].resetColor();
+        }
+    }
+
     player.setName(name);
+    return player;
 }
 
 function distributeTerrs() {
@@ -150,8 +172,10 @@ function distributeTerrs() {
 
 var startTurn = 0;
 var round = 0;
-
+var placement = 0;
+var neutral = undefined;
 function startGame() {
+    playing = shuffleArray(playing);
     turn = Math.floor(Math.random() * playing.length) - 1;
     startTurn = turn + 1;
     if (turn < 0) {
@@ -162,8 +186,12 @@ function startGame() {
         var packet = newPacket(1);
         packet.send(p.sID);
     } 
+    neutral = newPlayer(-1, "Neutral");
+    neutral.setColor("rgb(160,160,160)");
+    placement = playing.length;
     nextTurn();
 }
+
 stage = 0;
 function nextTurn() {
     stage = 1;
@@ -177,17 +205,24 @@ function nextTurn() {
         round += 1;
         log("Round "+round);
     }
-    if (playing[turn].terrs.length == 0) {
+    if (!playing[turn] || playing[turn].terrs.length == 0) {
         nextTurn();
         return;
     }
-    log(playing[turn].htmlName + "'s turn began");
     for (var i=0; i<playing.length; i++) {
-        playing[i].calcDice(); 
-        if (i == turn) { continue; }
-        var packet = newPacket(1);
-        packet.send(playing[i].sID);
+        if (playing[i]) {
+            playing[i].calcDice(); 
+            if (i == turn) { continue; }
+            var packet = newPacket(1);
+            packet.send(playing[i].sID);
+        }
     }
+    if (placement == 1) {
+        countdown = -1;
+        log(playing[turn].htmlName + " has won!");
+        return;
+    }
+    log(playing[turn].htmlName + "'s turn began");
     var packet = newPacket(2);
     packet.send(playing[turn].sID);
 }
@@ -233,6 +268,13 @@ function setupMessages() {
     var i6 = createMsgStruct(6, false);
     i6.addChars(2);
 
+    var i7 = createMsgStruct(7, false);
+    i7.addChars(2);
+
+    var i8 = createMsgStruct(8, false);
+    i8.addChars(2);
+    i8.addChars(2);
+
     var i10 = createMsgStruct(10, false);
     i10.addChars(2);
 
@@ -251,6 +293,10 @@ function setupMessages() {
 
     var o4 = createMsgStruct(4, true);
     o4.addChars(2);
+
+    var o7 = createMsgStruct(7, true);
+    o7.addString();
+    o7.addChars(2);
 }
 
 function startConnection() {
@@ -278,7 +324,8 @@ function handleNetwork() {
 
     if (msgID === 999) {
         hostCode = packet.read();
-        httpGet("/map.txt", parseMap, false);
+        generateMap();
+        //httpGet("/map.txt", parseMap, false);
     } else if (msgID === 998) {
         var pID = packet.readInt();
         var n = packet.read();
@@ -360,6 +407,28 @@ function handleNetwork() {
         for (var i=0; i<players[pID].terrs.length; i++) {
             players[pID].terrs[i].resetColor();
         }
+    } else if (msgID == 7) {
+        if (stage == 1) {
+            countdown = turnLength;
+        }
+        var pID = packet.readInt();
+        for (var i=0; i<playing.length; i++) {
+            if (playing[i] && playing[i].pID != pID) {
+                if (players[pID].surrender.indexOf(playing[i]) < 0) {
+                    var packet = newPacket(7);
+                    packet.write(playing[i].htmlName);
+                    packet.write(playing[i].pID);
+                    packet.send(extend(pID, 2));
+                }
+            }
+        }
+    } else if (msgID == 8) {
+        var pID = packet.readInt();
+        var surID = packet.readInt();
+        if (players[pID].surrenderTo(players[surID])) {
+            log(players[pID].htmlName + " surrendered to " + players[surID].htmlName);
+        }
+        handleDeath();
     } else if (msgID === 10) {
         var pID = packet.readInt();
         endTurn(players[pID]);
@@ -370,9 +439,15 @@ var newDice = 0;
 var handle = [];
 
 function endTurn(player) {
-    log(player.htmlName + "'s turn ended");
-    newDice = longestPath(player) + player.extra;
-    handle = player.terrs.slice(0);
+    newDice = 0;
+    if (player) {
+        for (var i=0; i<player.terrs.length; i++) {
+            player.terrs[i].resetColor();
+        }
+        log(player.htmlName + "'s turn ended");
+        newDice = longestPath(player) + player.extra;
+        handle = player.terrs.slice(0);
+    }
     stage = 5;
 }
 
@@ -448,6 +523,56 @@ function handleDiceRolled() {
     terr1.dice = 1;
     owners[0].calcDice();
     owners[1].calcDice();
+    handleDeath();
+}
+
+function handleDeath() {
+    for (var i=0; i<playing.length; i++) {
+        if (playing[i]) {
+            if (playing[i].terrs.length < 1) {
+                alert("Playing " + i + " is finished.");
+                kill(i);
+                handleDeath();
+                return;
+            } else if (playing[i].surrender.length > 0){
+                var remaining = [];
+                for (var j=0; j<playing.length; j++) {
+                    if (playing[j] && playing[j].pID != playing[i].pID) {
+                        remaining.push(playing[j]);
+                    }
+                }
+                found = 0;
+                for (var k=0; k<playing[i].surrender.length; k++) {
+                    if (remaining.indexOf(playing[i].surrender[k]) >= 0) {
+                        found += 1;
+                    }
+                }
+                if (found == remaining.length) {
+                    kill(i);
+                    handleDeath();
+                    return;
+                }
+            }
+        }
+    }
+}
+
+function kill(i) {
+    log(playing[i].htmlName + " finished in place " + placement);
+    placement -= 1;
+
+    while (playing[i].terrs.length > 0) {
+        var terr = playing[i].terrs[0];
+        terr.setOwner(neutral);
+    }
+
+    var packet = newPacket(1);
+    packet.send(playing[i].sID);
+
+    playing[i] = undefined;
+    if (turn == i) {
+        nextTurn();
+    }
 }
 
 function log(string) {
@@ -466,8 +591,12 @@ function gameLoop(ctx) {
     if (canWidth < 718) {
         canWidth = 718;
     }
+    var canHeight = window.innerHeight-2;
+    if (canHeight < 718) {
+        canHeight = 718;
+    }
     ctx.canvas.width = canWidth;
-    ctx.canvas.height = window.innerHeight-2;
+    ctx.canvas.height = canHeight
     var canvasWidth = ctx.canvas.width;
     var canvasHeight = ctx.canvas.height;
 
@@ -496,7 +625,7 @@ function gameLoop(ctx) {
     }
 
     //handleMouse();
-    ctx.fillStyle = "rgb(150,170,210)";
+    ctx.fillStyle = "rgb(180,200,255)";
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
 
@@ -575,8 +704,10 @@ function gameLoop(ctx) {
     }
 
     for (var i=0; i<playing.length; i++) {
-        var beside = Math.floor(canvasWidth/180);
-        var sDrX = (i%beside) * 180;
+        if (!playing[i]) { continue; }
+        var pWidth = 256;
+        var beside = Math.floor(canvasWidth/pWidth);
+        var sDrX = (i%beside) * pWidth;
         var sDrY = canvasHeight - 240 + (Math.floor(i/beside) * 96);
 
         var drX = sDrX;
@@ -589,7 +720,7 @@ function gameLoop(ctx) {
 
         //var str = p.name + " | Territories: " + p.terrs.length + " | Dice: " + p.dice;
         var str = p.name;
-        while (ctx.measureText(str).width > 180 && str.length > 2) {
+        while (ctx.measureText(str).width > pWidth && str.length > 2) {
             str = str.slice(0, str.length-2);
         }
         ctx.fillText(str, drX, drY);
@@ -615,13 +746,13 @@ function gameLoop(ctx) {
         drX += 76;
         str = String(p.dice);
         if (p.extra > 0) {
-            //str += " + " + String(p.extra);
+            str += " + " + String(p.extra);
         }
         ctx.fillText(str, drX, drY);
         ctx.strokeText(str, drX, drY);
         if (playing[turn] === playing[i]) {
             if (stage == 1) {
-                var barWidth = 180 * (countdown/turnLength);
+                var barWidth = pWidth * (countdown/turnLength);
                 ctx.fillRect(sDrX,sDrY+30, barWidth, 8);
                 ctx.strokeRect(sDrX,sDrY+30, barWidth, 8);
             }
@@ -653,8 +784,6 @@ function newTerr(num, dButton) {
     t.avg_x = 0;
     t.avg_y = 0;
     t.hexes = [];
-    t.color = "rgb(160,160,160)";//randomColor();
-    t.bright = brighten(t.color, 40);
     t.owner = undefined;
     t.dice = Math.ceil(Math.random() * 5);
     t.adj = [];
@@ -662,7 +791,9 @@ function newTerr(num, dButton) {
     t.diceImgs = [];
 
     t.addHex = function(h) {
+        h.tID = this.tID;
         this.hexes.push(h);
+        h.setColor(this.color);
     };
 
     t.draw = function(ctx) {
@@ -673,14 +804,14 @@ function newTerr(num, dButton) {
         for (var i=0; i<this.dice; i++) {
             ctx.fillStyle = this.bright;
             ctx.fill(this.diceImgs[i]);
-            ctx.strokeStyle = "rgb(0,0,0)";
+            ctx.strokeStyle = this.dark;
             ctx.stroke(this.diceImgs[i]);
         }
 
         if (this.drawNum) {
             // Draw Terr number
             var s = String(this.tID);
-            ctx.font = "bold 36px sans-serif";
+            ctx.font = "bold 42px sans-serif";
             ctx.fillStyle = "rgb(255,255,255)";
             var xoff = -20;
             var yoff = 2;
@@ -695,24 +826,32 @@ function newTerr(num, dButton) {
 
     t.setColor = function(color) {
         this.color = color;
+        this.bright = brighten(this.color, 50);
+        this.dark = brighten(this.color, -120);
         for (var i=0; i<this.hexes.length; i++) {
             this.hexes[i].setColor(this.color);
         }
 
     }
+    
+    t.setColor("rgb(160,160,160)");
 
     t.setOwner = function(owner) {
         if (this.owner) {
             var ind = this.owner.terrs.indexOf(this);
             this.owner.terrs.splice(ind, 1);
         }
-        this.owner = owner;
-        this.owner.terrs.push(this);
-        this.setColor(this.owner.color);
-        this.bright = brighten(this.color, 50);
-        this.owner.terrs.sort(function(t1, t2) {
-            return t1.tID - t2.tID;
-        });
+        if (owner) {
+            this.owner = owner;
+            this.owner.terrs.push(this);
+            this.setColor(this.owner.color);
+            this.owner.terrs.sort(function(t1, t2) {
+                return t1.tID - t2.tID;
+            });
+        } else {
+            this.owner = undefined;
+            this.setColor("rgb(160,160,160)");
+        }
     }
 
     t.roll = function() {
@@ -768,7 +907,7 @@ function renderTerr(terr) {
     var dx = terr.avg_x;
     var dy = terr.avg_y;
     var diceWidth = hexWidth * (4/9);
-    var diceHeight = hexHeight;
+    var diceHeight = diceWidth;
     var spread = 6;
     var w2 = diceWidth/2;
     var h2 = diceHeight/2;
@@ -859,6 +998,22 @@ var surrounding = [
     Array(-1, -1),
 ];
 
+function getAllSurrounding(hex) {
+    var out = [];
+    for (var i=0; i<surrounding.length; i++) {
+        var p = surrounding[i];
+        var rr = hex.r+p[0];
+        var cc = hex.c+p[1];
+        var n = hexes[rr];
+        if (!n) { continue; }
+        n = n[cc];
+        if (n != undefined) {
+            out.push(n);
+        }
+    }
+    return out;
+}
+
 function getSurrounding(hex) {
     var out = [];
     for (var i=0; i<surrounding.length; i++) {
@@ -873,7 +1028,6 @@ function getSurrounding(hex) {
         }
     }
     return out;
-
 }
 
 function isSurrounded(hex) {
@@ -1086,6 +1240,144 @@ function renderHex(x, y) {
 
 // Map making
 
+function getHex(r, c) {
+    if (hexes[r]) {
+        return hexes[r][c];
+    }
+    return undefined;
+}
+
+function getFreeSurroundingTerr(terr) {
+    var allSurround = [];
+    for (i in terr.hexes) {
+        var sur = getAllSurrounding(terr.hexes[i]);
+        for (j in sur) {
+            if (sur[j].tID == -1) {
+                allSurround.push(sur[j]);
+            }
+        }
+    }
+    return allSurround;
+}
+
+function generateMap(minSize) {
+    if (!minSize) {
+        minSize = 14;
+    }
+    terrs = [];
+    for (r in hexes) {
+        for (c in hexes[r]) {
+            var reset = getHex(r,c);
+            if (reset) {
+                reset.tID = -1;
+            }
+        }
+    }
+    var totalTerrs = Math.floor(Math.random() * 5) + 28;
+    var tID = -1;
+    var hex = undefined;
+    while (hex == undefined) {
+        var r = Math.floor(mapWidth * Math.random());
+        var c = Math.floor(mapHeight * Math.random());
+        var hex = getHex(r,c);
+    }
+    var attempts = 0;
+    var maxAttempts = 200;
+    while (terrs.length < totalTerrs) {
+        attempts += 1;
+        tID += 1;
+        newTerr(tID, false);
+        var terr = terrs[tID];
+        terr.addHex(hex);
+        var terrSize = minSize + Math.floor(Math.random() * 12);
+        while (terr.hexes.length < terrSize) {
+            var nearby = getFreeSurroundingTerr(terr);
+            if (nearby.length == 0) {
+                if (terr.hexes.length < minSize) {
+                    for (h in terr.hexes) {
+                        terr.hexes[h].tID = -2;
+                        terr.hexes[h].setColor("rgb(100,0,0)");
+                    }
+                    terrs[tID] = undefined;
+                    tID -= 1;
+                }
+                break;
+            } else {
+                var branchNum = Math.floor(Math.random() * nearby.length);
+                var branch = nearby[branchNum];
+                terr.addHex(branch);
+            }
+        }
+        var picked = false;
+        while (!picked) {
+            attempts += 1;
+            var allSurround = getFreeSurroundingTerr(terr);
+            if (allSurround.length == 0) {
+                var nextT = Math.floor(Math.random() * (tID+1));
+                terr = terrs[nextT];
+            } else {
+                var next = Math.floor(Math.random() * allSurround.length);
+                hex = allSurround[next];
+                picked = true;
+            }
+            if (attempts > maxAttempts) {
+                alert("Busted 2.");
+                break;
+            }
+        }
+        if (attempts > maxAttempts) {
+            alert("Busted 1.");
+            break;
+        }
+    }
+    terrs.length = tID + 1;
+
+    for (r in hexes) {
+        for (c in hexes[r]) {
+            var check = getHex(r,c);
+            if (check) {
+                if (check.tID < 0) {
+                    check.tID = -2;
+                } else {
+                    check.redraw();
+                }
+            }
+        }
+    }
+    finishMap();
+}
+
+function calcAdj(terr) {
+    for (var h=0; h<terr.hexes.length; h++) {
+        var hh = terr.hexes[h];
+        var surrounding = getSurrounding(hh);
+        for (var i=0; i<surrounding.length; i++) {
+            var sur = surrounding[i];
+            if (sur.tID != hh.tID) {
+                if (terr.adj.indexOf(terrs[sur.tID]) < 0) {
+                    terr.adj.push(terrs[sur.tID]);
+                }
+            }
+        }
+        
+        hh.move();
+    }
+    terr.adj.sort(function(t1, t2) {
+        return t1.tID - t2.tID;
+    });
+    renderTerr(terr);
+}
+
+function finishMap() {
+    for (var t=0; t<terrs.length; t++) {
+        calcAdj(terrs[t]);
+    }
+    drawTerrs = terrs.slice(0);
+    drawTerrs.sort(function(terr1, terr2) {
+        return terr1.avg_y - terr2.avg_y;
+    });
+}
+
 function parseMap(allText, edit) {
     var data = allText.split("|");
     var numTerrs = parseInt(data[0]);
@@ -1107,30 +1399,7 @@ function parseMap(allText, edit) {
             terrs[n].addHex(hexes[r][c]);
         }
     }
-    for (var t=0; t<terrs.length; t++) {
-        for (var h=0; h<terrs[t].hexes.length; h++) {
-            var hh = terrs[t].hexes[h];
-            var surrounding = getSurrounding(hh);
-            for (var i=0; i<surrounding.length; i++) {
-                var sur = surrounding[i];
-                if (sur.tID != hh.tID) {
-                    if (terrs[t].adj.indexOf(terrs[sur.tID]) < 0) {
-                        terrs[t].adj.push(terrs[sur.tID]);
-                    }
-                }
-            }
-            
-            hh.move();
-        }
-        terrs[t].adj.sort(function(t1, t2) {
-            return t1.tID - t2.tID;
-        });
-        renderTerr(terrs[t]);
-    }
-    drawTerrs = terrs.slice(0);
-    drawTerrs.sort(function(terr1, terr2) {
-        return terr1.avg_y - terr2.avg_y;
-    });
+    finishMap();
 }
 
 

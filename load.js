@@ -18,7 +18,31 @@ $(document).ready(function() {
 
     // This interval can be used for anything, but it currently only handles incoming messaged.
     initialWait = setInterval(gameLoop, 15);
+
+    $("#name").val(getCookie("name"));
+    $("#host").val(getCookie("host"));
 });
+
+function setCookie(cname, cvalue, exdays) {
+    if (exdays === undefined) {
+        exdays = 1;
+    }
+    var d = new Date();
+    d.setTime(d.getTime() + (exdays*24*60*60*1000));
+    var expires = "expires="+d.toUTCString();
+    document.cookie = cname + "=" + cvalue + "; " + expires;
+}
+
+function getCookie(cname) {
+    var name = cname + "=";
+    var ca = document.cookie.split(';');
+    for(var i=0; i<ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0)==' ') c = c.substring(1);
+        if (c.indexOf(name) == 0) return c.substring(name.length,c.length);
+    }
+    return "";
+}
 
 function setupMessages() {
     // Incoming MSG_LOGIN
@@ -42,8 +66,12 @@ function startConnection() {
         var packet = newPacket(MSG_LOGIN);
         // Writing our name. 'Write' is currently expecting a String,
         // as that is what we defined earlier.
-        packet.write($("#host").val().toUpperCase());
-        packet.write($("#name").val());
+        var name = $("#name").val();
+        var host = $("#host").val().toUpperCase();
+        packet.write(host);
+        packet.write(name);
+        setCookie("name", name);
+        setCookie("host", host);
         // and then we send the packet!
         packet.send();
         $("#notify").text("Connected!");
@@ -55,7 +83,7 @@ function startConnection() {
     }
 
     // Start the connection!
-    wsconnect("ws://localhost:8886", onopen, onclose);
+    wsconnect("ws://128.61.29.30:8886", onopen, onclose);
 }
 
 // This function handles incoming packets
@@ -78,10 +106,12 @@ function handleNetwork() {
         var html = packet.read();
         var script = packet.read();
         $("#newHtml").load(html, function() {
-        });
-        $.getScript(script, function(data, textStatus, req) {
-            clearInterval(initialWait);
-            main();
+            $("#newHtml").hide();
+            $.getScript(script, function(data, textStatus, req) {
+                $("#newHtml").show();
+                clearInterval(initialWait);
+                main();
+            });
         });
     }
 }

@@ -21,6 +21,11 @@ function main() {
         packet.write(pID);
         packet.send();
     });
+    $("#surrender").click(function() {
+        var packet = newPacket(7);
+        packet.write(pID);
+        packet.send();
+    });
     $("#goBack").click(function() {
         $("#notify").text("It is your turn!");
         $(".turnButton").show();
@@ -59,6 +64,10 @@ function setupMessages() {
     var i4 = createMsgStruct(4, false);
     i4.addChars(2);
 
+    var i7 = createMsgStruct(7, false);
+    i7.addString();
+    i7.addChars(2);
+
     var o999 = createMsgStruct(MSG_LOGIN, true);
     o999.addChars(4);
     o999.addString(4);
@@ -85,6 +94,13 @@ function setupMessages() {
 
     var o6 = createMsgStruct(6, true);
     o6.addChars(2);
+
+    var o7 = createMsgStruct(7, true);
+    o7.addChars(2);
+
+    var o8 = createMsgStruct(8, true);
+    o8.addChars(2);
+    o8.addChars(2);
 
     var o10 = createMsgStruct(10, true);
     o10.addChars(2);
@@ -168,7 +184,24 @@ function handleNetwork() {
             $("#notify").text("It is your turn!");
         });
         $("#myTurn").append(terr);
+    } else if (msgID === 7) {
+        $("#notify").text("Surrender to:");
+        $(".turnButton").hide();
+        var pName = packet.read();
+        var ppID = packet.readInt();
+        var terr = $('<div class="spanButton terrButton"><span class="spanButtonTitle">'+pName+'<span></div>');
+        terr.click(function() {
+            var packet = newPacket(8);
+            packet.write(pID);
+            packet.write(ppID);
+            packet.send();
+            $(".terrButton").remove();
+            $(".turnButton").show();
+            $("#notify").text("It is your turn!");
+        });
+        $("#myTurn").append(terr);
     }
+
 }
 
 function startTurn() {
