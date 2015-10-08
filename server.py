@@ -57,7 +57,7 @@ def parseHeaders(headers):
 def main():
     try:
         # Server on the standard webserver port of 80.
-        server = HTTPServer(('', 80), MyHandler)
+        server = HTTPServer(('', 8001), MyHandler)
         print("Starting webpage server...")
         server.serve_forever()
     except KeyboardInterrupt:
