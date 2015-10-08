@@ -138,6 +138,7 @@ function newPlayer(pID, name) {
 }
 
 function distributeTerrs() {
+    playing = shuffleArray(playing);
     var avail = terrs.slice(0);
     avail = shuffleArray(avail);
     while (avail.length > 0) {
@@ -158,8 +159,12 @@ function distributeTerrs() {
         }
     }
 
+    var addition = Math.floor(playing.length / 3);
     for (var i=0; i<playing.length; i++) {
         var numDice = Math.ceil(minTerrs * 10/3) - playing[i].terrs.length;
+        if (i > addition) {
+            numDice += 1;
+        }
         while (numDice > 0) {
             var num = Math.floor(Math.random() * playing[i].terrs.length);
             if (playing[i].terrs[num].dice < 8) {
@@ -175,12 +180,8 @@ var round = 0;
 var placement = 0;
 var neutral = undefined;
 function startGame() {
-    playing = shuffleArray(playing);
-    turn = Math.floor(Math.random() * playing.length) - 1;
-    startTurn = turn + 1;
-    if (turn < 0) {
-        turn = 0;
-    }
+    turn = -1;
+    startTurn = 0;
     for (var i=0; i<playing.length; i++) {
         var p = playing[i];
         var packet = newPacket(1);
@@ -220,6 +221,7 @@ function nextTurn() {
     if (placement == 1) {
         countdown = -1;
         log(playing[turn].htmlName + " has won!");
+        turn = -1;
         return;
     }
     log(playing[turn].htmlName + "'s turn began");
@@ -311,7 +313,7 @@ function startConnection() {
         alert("Lost connection...");
     }
 
-    wsconnect("ws://localhost:8886", onopen, onclose);
+    wsconnect("ws://games.room409.xyz:8886", onopen, onclose);
 }
 
 function handleNetwork() {
@@ -530,7 +532,6 @@ function handleDeath() {
     for (var i=0; i<playing.length; i++) {
         if (playing[i]) {
             if (playing[i].terrs.length < 1) {
-                alert("Playing " + i + " is finished.");
                 kill(i);
                 handleDeath();
                 return;
@@ -675,7 +676,7 @@ function gameLoop(ctx) {
         ctx.fillText("Territory " + String(activeTerr.tID), 10, 20);
     }
 
-    ctx.fillText("Host code: "+hostCode+" | 128.61.29.30", 10, 30);
+    ctx.fillText("Host code: "+hostCode+" | games.room409.xyz", 10, 30);
 
     if (stage == 3 || stage == 4) {
         ctx.font = "30px sans-serif";

@@ -125,7 +125,7 @@ function startConnection() {
     }
 
     $("#notify").text("Connecting...");  
-    wsconnect("ws://128.61.29.30:8886", onopen, onclose);
+    wsconnect("ws://games.room409.xyz:8886", onopen, onclose);
 }
 
 function handleNetwork() {
